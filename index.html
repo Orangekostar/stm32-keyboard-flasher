@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STM32F103 Keyboard Flasher — 一键烧录工具</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #222636;
+    --border: #2a2e3d;
+    --text: #e1e4ed;
+    --text2: #949ab0;
+    --accent: #4da6ff;
+    --accent2: #3385d6;
+    --green: #34d399;
+    --yellow: #fbbf24;
+    --red: #f87171;
+    --orange: #fb923c;
+    --radius: 10px;
+    --shadow: 0 2px 16px rgba(0,0,0,.3);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+  }
+  .container {
+    width: 100%;
+    max-width: 620px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  header {
+    text-align: center;
+    padding: 12px 0 4px;
+  }
+  header h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+  header .subtitle {
+    font-size: 0.85rem;
+    color: var(--text2);
+    margin-top: 4px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    box-shadow: var(--shadow);
+  }
+  .card-header {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-header .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  .dot-ok { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot-warn { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+  .dot-err { background: var(--red); box-shadow: 0 0 6px var(--red); }
+
+  /* Driver section */
+  .driver-info { display: none; }
+  .driver-info.show { display: block; }
+  .driver-info .steps {
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin: 10px 0;
+    font-size: 0.88rem;
+    line-height: 1.7;
+  }
+  .driver-info .steps code {
+    background: rgba(77,166,255,.15);
+    color: var(--accent);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    white-space: nowrap;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 18px;
+    border: none;
+    border-radius: 7px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .15s;
+    color: #fff;
+    white-space: nowrap;
+  }
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+  .btn-accent { background: var(--accent2); }
+  .btn-accent:hover:not(:disabled) { background: var(--accent); }
+  .btn-outline {
+    background: transparent;
+    border: 1.5px solid var(--border);
+    color: var(--text);
+  }
+  .btn-outline:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .btn-sm { padding: 5px 12px; font-size: 0.8rem; }
+  .btn-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
+  /* Flash card */
+  .flash-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .file-input-wrapper {
+    flex: 1;
+    min-width: 180px;
+    position: relative;
+  }
+  .file-input-wrapper input[type=file] {
+    width: 100%;
+    padding: 9px 12px;
+    background: var(--surface2);
+    border: 1.5px dashed var(--border);
+    border-radius: 7px;
+    color: var(--text2);
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .file-input-wrapper input[type=file]:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+  .file-input-wrapper input[type=file]::file-selector-button {
+    display: none;
+  }
+  .flash-btn {
+    padding: 10px 32px;
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    background: linear-gradient(135deg, #f59e0b, #ef4444);
+    border: none;
+    border-radius: 7px;
+    color: #fff;
+    cursor: pointer;
+    transition: all .15s;
+    flex-shrink: 0;
+  }
+  .flash-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 20px rgba(245,158,11,.35);
+  }
+  .flash-btn:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  /* Progress */
+  .progress-wrap { display: none; margin-top: 12px; }
+  .progress-wrap.show { display: block; }
+  .progress-bar-outer {
+    width: 100%;
+    height: 8px;
+    background: var(--surface2);
+    border-radius: 99px;
+    overflow: hidden;
+    margin-bottom: 6px;
+  }
+  .progress-bar-inner {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--green));
+    border-radius: 99px;
+    transition: width .2s;
+    width: 0%;
+  }
+  .progress-text {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: var(--text2);
+  }
+
+  /* Logs */
+  .log-area {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    max-height: 200px;
+    overflow-y: auto;
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+    font-size: 0.78rem;
+    line-height: 1.6;
+    display: none;
+  }
+  .log-area.show { display: block; }
+  .log-area .log-line { margin: 1px 0; }
+  .log-debug { color: var(--text2); }
+  .log-info  { color: var(--accent); }
+  .log-ok    { color: var(--green); }
+  .log-warn  { color: var(--yellow); }
+  .log-err   { color: var(--red); }
+
+  /* Footer */
+  footer {
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--text2);
+    padding: 8px 0 20px;
+  }
+  footer a { color: var(--accent); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>🔌 STM32F103 Keyboard Flasher</h1>
+  <p class="subtitle">Maple 003 Bootloader · WebUSB · 一键烧录 .bin 固件</p>
+</header>
+
+<!-- Driver Status Card -->
+<div class="card" id="driverCard">
+  <div class="card-header">
+    <span class="dot" id="driverDot"></span>
+    <span id="driverTitle">检测中...</span>
+  </div>
+  <div id="driverReady" style="display:none;">
+    <p style="color:var(--green);font-weight:600;">✅ 驱动就绪 — 检测到 Maple 003 设备</p>
+  </div>
+  <div id="driverNeeded" class="driver-info" style="display:none;">
+    <p style="color:var(--yellow);font-weight:600;margin-bottom:8px;">⚠️ 未检测到设备，需要安装驱动</p>
+    <div class="steps" id="driverSteps"></div>
+    <div class="btn-group" id="driverBtnGroup"></div>
+  </div>
+</div>
+
+<!-- Connection Card -->
+<div class="card">
+  <div class="card-header">
+    <span class="dot" id="connDot" style="background:var(--text2);"></span>
+    连接设备
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <button class="btn btn-accent" id="btnConnect" onclick="doConnect()">🔌 连接设备</button>
+    <span id="deviceInfo" style="font-size:0.82rem;color:var(--text2);">尚未连接</span>
+  </div>
+</div>
+
+<!-- Flash Card -->
+<div class="card">
+  <div class="card-header">
+    <span class="dot" id="flashDot" style="background:var(--text2);"></span>
+    烧录固件
+  </div>
+  <div class="flash-row">
+    <div class="file-input-wrapper">
+      <input type="file" id="fileInput" accept=".bin" onchange="onFileSelected(this)">
+    </div>
+    <button class="flash-btn" id="btnFlash" disabled onclick="doFlash()">🔥 烧录</button>
+  </div>
+  <div style="font-size:0.75rem;color:var(--text2);margin-top:6px;">
+    烧录地址: <code style="color:var(--accent);">0x08002000</code>
+    &nbsp;|&nbsp; 固件大小: <span id="fwSize">—</span>
+  </div>
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-bar-outer">
+      <div class="progress-bar-inner" id="progressBar"></div>
+    </div>
+    <div class="progress-text">
+      <span id="progressLabel">准备中...</span>
+      <span id="progressPct">0%</span>
+    </div>
+  </div>
+</div>
+
+<!-- Log Card -->
+<div class="card" id="logCard" style="display:none;">
+  <div class="card-header">📋 日志</div>
+  <div class="log-area show" id="logArea"></div>
+</div>
+
+<footer>
+  基于 WebUSB API · 需 Chrome/Edge 89+ &nbsp;|&nbsp;
+  <a href="https://github.com/devanlai/webdfu" target="_blank">参考 webdfu</a>
+</footer>
+
+</div>
+
+<script>
+/* ================================================================
+   DFU Protocol Constants
+   ================================================================ */
+const DFU_STATES = {
+  0: 'appIDLE', 1: 'appDETACH', 2: 'dfuIDLE', 3: 'dfuDNLOAD_SYNC',
+  4: 'dfuDNBUSY', 5: 'dfuDNLOAD_IDLE', 6: 'dfuMANIFEST_SYNC',
+  7: 'dfuMANIFEST', 8: 'dfuMANIFEST_WAIT_RESET', 9: 'dfuUPLOAD_IDLE',
+  10: 'dfuERROR'
+};
+const DFU_STATUS_OK = 0x00;
+const DFU_CMD_DETACH    = 0x00;
+const DFU_CMD_DNLOAD    = 0x01;
+const DFU_CMD_UPLOAD    = 0x02;
+const DFU_CMD_GETSTATUS = 0x03;
+const DFU_CMD_CLRSTATUS = 0x04;
+const DFU_CMD_GETSTATE  = 0x05;
+const DFU_CMD_ABORT     = 0x06;
+
+const DFUSE_CMD_SET_ADDRESS  = 0x21;
+const DFUSE_CMD_ERASE_SECTOR = 0x41;
+
+/* ================================================================
+   Base DFU Device
+   ================================================================ */
+class DfuDevice {
+  constructor(usbDevice, ifaceIndex, altSetting) {
+    this.device = usbDevice;
+    this.ifaceIndex = ifaceIndex;
+    this.altSetting = altSetting;
+    this.configValue = null;
+    this.transferSize = 1024;
+    this.manifestationTolerant = false;
+  }
+
+  async open() {
+    await this.device.open();
+    if (this.device.configuration === null) {
+      await this.device.selectConfiguration(1);
+    }
+    await this.device.claimInterface(this.ifaceIndex);
+    await this.device.selectAlternateInterface(this.ifaceIndex, this.altSetting);
+  }
+
+  async close() {
+    await this.device.close();
+  }
+
+  async requestOut(bRequest, wValue, data) {
+    try {
+      await this.device.controlTransferOut({
+        requestType: 'class',
+        recipient: 'interface',
+        request: bRequest,
+        value: wValue,
+        index: this.ifaceIndex
+      }, data);
+    } catch (e) {
+      if (e.message && e.message.includes('Device unavailable')) {
+        logWarn('设备已断开连接');
+      }
+      throw e;
+    }
+  }
+
+  async requestIn(bRequest, wValue, length) {
+    try {
+      const result = await this.device.controlTransferIn({
+        requestType: 'class',
+        recipient: 'interface',
+        request: bRequest,
+        value: wValue,
+        index: this.ifaceIndex
+      }, length);
+      return result.data;
+    } catch (e) {
+      if (e.message && e.message.includes('Device unavailable')) {
+        logWarn('设备已断开连接');
+      }
+      throw e;
+    }
+  }
+
+  async getState() {
+    const data = await this.requestIn(DFU_CMD_GETSTATE, 0, 1);
+    return data.getUint8(0);
+  }
+
+  async getStatus() {
+    const data = await this.requestIn(DFU_CMD_GETSTATUS, 0, 6);
+    return {
+      status: data.getUint8(0),
+      pollTimeout: data.getUint8(1) | (data.getUint8(2) << 8) | (data.getUint8(3) << 16),
+      state: data.getUint8(4),
+    };
+  }
+
+  async clearStatus() {
+    await this.requestOut(DFU_CMD_CLRSTATUS, 0, new ArrayBuffer(0));
+  }
+
+  async abort() {
+    await this.requestOut(DFU_CMD_ABORT, 0, new ArrayBuffer(0));
+  }
+
+  async abortToIdle() {
+    try {
+      await this.abort();
+    } catch (e) { /* ignore */ }
+    try {
+      await this.clearStatus();
+    } catch (e) { /* ignore */ }
+    const state = await this.getState();
+    if (state !== 2 /* dfuIDLE */) {
+      throw new Error(`无法回到 IDLE 状态，当前状态: ${DFU_STATES[state]}(${state})`);
+    }
+  }
+
+  async download(data, blockNum) {
+    return await this.requestOut(DFU_CMD_DNLOAD, blockNum, data);
+  }
+
+  async upload(length, blockNum) {
+    return await this.requestIn(DFU_CMD_UPLOAD, blockNum, length);
+  }
+
+  async pollUntil(predicate) {
+    for (let i = 0; i < 300; i++) {
+      const status = await this.getStatus();
+      if (predicate(status.state)) return status;
+      const delay = Math.max(status.pollTimeout, 10);
+      await sleep(delay);
+    }
+    const final = await this.getStatus();
+    if (!predicate(final.state)) {
+      throw new Error(`超时：状态未达到预期，当前: ${DFU_STATES[final.state]}(${final.state})`);
+    }
+    return final;
+  }
+
+  async pollUntilIdle(expectedState) {
+    return await this.pollUntil(state => state === expectedState);
+  }
+
+  // Standard DFU download (no address management)
+  async doDownloadStandard(xferSize, firmwareData) {
+    let bytesSent = 0;
+    const totalSize = firmwareData.byteLength;
+    let blockNum = 0;
+
+    logInfo(`开始烧录 ${niceSize(totalSize)} ...`);
+
+    while (bytesSent < totalSize) {
+      const remaining = totalSize - bytesSent;
+      const chunkSize = Math.min(remaining, xferSize);
+      const chunk = firmwareData.slice(bytesSent, bytesSent + chunkSize);
+
+      await this.download(chunk, blockNum);
+      const status = await this.pollUntilIdle(5 /* dfuDNLOAD_IDLE */);
+
+      if (status.status !== DFU_STATUS_OK) {
+        throw new Error(`DFU 下载错误: status=${status.status}, state=${DFU_STATES[status.state]}(${status.state})`);
+      }
+
+      bytesSent += chunkSize;
+      blockNum = (blockNum + 1) & 0xFFFF;
+      updateProgress(bytesSent, totalSize, '写入中');
+    }
+
+    // Signal end of download with zero-length packet
+    logInfo('发送结束信号...');
+    await this.download(new ArrayBuffer(0), blockNum);
+
+    // Wait for manifestation
+    logInfo('等待固件生效 (manifest)...');
+    try {
+      await this.pollUntil(state => state === 7 /* dfuMANIFEST */);
+      logOk('固件已生效！设备即将重启。');
+    } catch (e) {
+      // Device may reset before we can poll
+      logOk('设备正在重启，烧录完成！');
+    }
+  }
+}
+
+/* ================================================================
+   DfuSe Extension
+   ================================================================ */
+class DfuseDevice extends DfuDevice {
+  constructor(usbDevice, ifaceIndex, altSetting, memoryDescriptor) {
+    super(usbDevice, ifaceIndex, altSetting);
+    this.memoryInfo = parseMemoryDescriptor(memoryDescriptor);
+    this.startAddress = 0x08002000;
+  }
+
+  async dfuseCommand(command, param, paramLen) {
+    if (param === undefined) { param = 0; paramLen = 1; }
+
+    const payload = new ArrayBuffer(paramLen + 1);
+    const view = new DataView(payload);
+    view.setUint8(0, command);
+    if (paramLen === 1) {
+      view.setUint8(1, param);
+    } else if (paramLen === 4) {
+      view.setUint32(1, param, true); // little-endian
+    }
+
+    logDebug(`DfuSe 命令: ${command === 0x21 ? 'SET_ADDRESS' : 'ERASE_SECTOR'} 0x${param.toString(16).padStart(8,'0')}`);
+    await this.download(payload, 0);
+    const status = await this.pollUntil(state => state !== 4 /* dfuDNBUSY */);
+    if (status.status !== DFU_STATUS_OK) {
+      throw new Error(`DfuSe 命令失败: status=${status.status}`);
+    }
+  }
+
+  getSegment(addr) {
+    if (!this.memoryInfo || !this.memoryInfo.segments) return null;
+    for (const seg of this.memoryInfo.segments) {
+      if (seg.start <= addr && addr < seg.end) return seg;
+    }
+    return null;
+  }
+
+  getSectorStart(addr) {
+    const seg = this.getSegment(addr);
+    if (!seg) throw new Error(`地址 0x${addr.toString(16)} 不在内存映射范围内`);
+    const sectorIndex = Math.floor((addr - seg.start) / seg.sectorSize);
+    return seg.start + sectorIndex * seg.sectorSize;
+  }
+
+  getSectorEnd(addr) {
+    const seg = this.getSegment(addr);
+    if (!seg) throw new Error(`地址 0x${addr.toString(16)} 不在内存映射范围内`);
+    const sectorIndex = Math.floor((addr - seg.start) / seg.sectorSize);
+    return seg.start + (sectorIndex + 1) * seg.sectorSize;
+  }
+
+  async erase(startAddr, length) {
+    let addr = this.getSectorStart(startAddr);
+    const endAddr = this.getSectorEnd(startAddr + length - 1);
+    const totalErase = endAddr - addr;
+
+    logInfo(`擦除 Flash: 0x${startAddr.toString(16)} - 0x${(startAddr+length).toString(16)}`);
+
+    while (addr < endAddr) {
+      let seg = this.getSegment(addr);
+      if (!seg) break;
+      if (!seg.erasable) {
+        addr = seg.end;
+        continue;
+      }
+      await this.dfuseCommand(DFUSE_CMD_ERASE_SECTOR, addr, 4);
+      addr += seg.sectorSize;
+    }
+    logOk('擦除完成');
+  }
+
+  async doDownloadDfuse(xferSize, firmwareData) {
+    const totalSize = firmwareData.byteLength;
+    let startAddr = this.startAddress;
+
+    // Verify address is in memory map
+    if (!this.getSegment(startAddr)) {
+      throw new Error(`起始地址 0x${startAddr.toString(16)} 不在内存映射范围内`);
+    }
+
+    // Erase
+    await this.erase(startAddr, totalSize);
+
+    // Write
+    logInfo(`写入固件: ${niceSize(totalSize)} @ 0x${startAddr.toString(16)}`);
+    let bytesSent = 0;
+    let addr = startAddr;
+
+    while (bytesSent < totalSize) {
+      const remaining = totalSize - bytesSent;
+      const chunkSize = Math.min(remaining, xferSize);
+      const chunk = firmwareData.slice(bytesSent, bytesSent + chunkSize);
+
+      await this.dfuseCommand(DFUSE_CMD_SET_ADDRESS, addr, 4);
+      await this.download(chunk, 2); // DfuSe data blocks start at 2
+      const status = await this.pollUntilIdle(5 /* dfuDNLOAD_IDLE */);
+
+      if (status.status !== DFU_STATUS_OK) {
+        throw new Error(`写入失败 @ 0x${addr.toString(16)}: status=${status.status}`);
+      }
+
+      bytesSent += chunkSize;
+      addr += chunkSize;
+      updateProgress(bytesSent, totalSize, '写入中');
+    }
+
+    // Manifest
+    logInfo('发送结束信号...');
+    await this.dfuseCommand(DFUSE_CMD_SET_ADDRESS, startAddr, 4);
+    await this.download(new ArrayBuffer(0), 0);
+
+    try {
+      await this.pollUntil(state => state === 7 /* dfuMANIFEST */);
+      logOk('固件已生效！');
+    } catch (e) {
+      logOk('设备正在重启，烧录完成！');
+    }
+  }
+}
+
+/* ================================================================
+   Memory Descriptor Parser (DfuSe)
+   ================================================================ */
+function parseMemoryDescriptor(desc) {
+  const nameEndIdx = desc.indexOf('/');
+  if (!desc.startsWith('@') || nameEndIdx === -1) return null;
+
+  const name = desc.substring(1, nameEndIdx).trim();
+  const segmentStr = desc.substring(nameEndIdx);
+  const segments = [];
+  const multipliers = { ' ': 1, 'B': 1, 'K': 1024, 'M': 1048576 };
+
+  const contigRe = /\/\s*(0x[0-9a-fA-F]{1,8})\s*\/(\s*[0-9]+\s*\*\s*[0-9]+\s?[ BKM]\s*[a-g]\s*,?\s*)+/g;
+  let contigMatch;
+  while ((contigMatch = contigRe.exec(segmentStr)) !== null) {
+    let startAddr = parseInt(contigMatch[1], 16);
+    const segRe = /([0-9]+)\s*\*\s*([0-9]+)\s?([ BKM])\s*([a-g])\s*,?\s*/g;
+    let segMatch;
+    while ((segMatch = segRe.exec(contigMatch[0])) !== null) {
+      const count = parseInt(segMatch[1], 10);
+      const size = parseInt(segMatch[2], 10) * multipliers[segMatch[3]];
+      const props = segMatch[4].charCodeAt(0) - 'a'.charCodeAt(0) + 1;
+      segments.push({
+        start: startAddr,
+        sectorSize: size,
+        end: startAddr + size * count,
+        readable: (props & 0x1) !== 0,
+        erasable: (props & 0x2) !== 0,
+        writable: (props & 0x4) !== 0,
+      });
+      startAddr += size * count;
+    }
+  }
+  return { name, segments };
+}
+
+async function readDfuDescriptor(device) {
+  // Read configuration descriptor to find DFU functional descriptor
+  try {
+    // The DFU functional descriptor is embedded in the configuration descriptor
+    // We need to read it via control transfer
+    if (!device.opened) await device.open();
+    const data = await device.controlTransferIn({
+      requestType: 'standard',
+      recipient: 'device',
+      request: 6, // GET_DESCRIPTOR
+      value: 0x0200, // Configuration descriptor
+      index: 0
+    }, 256);
+    // Parse: look for DFU functional descriptor (type 0x21)
+    const raw = new Uint8Array(data.buffer);
+    let offset = 0;
+    let dfuDesc = null;
+    while (offset < raw.length) {
+      const len = raw[offset];
+      const type = raw[offset + 1];
+      if (len === 0) break;
+      if (type === 0x21) {
+        // DFU functional descriptor
+        dfuDesc = {
+          bmAttributes: raw[offset + 2],
+          wDetachTimeOut: raw[offset + 3] | (raw[offset + 4] << 8),
+          wTransferSize: raw[offset + 5] | (raw[offset + 6] << 8),
+          bcdDFUVersion: raw[offset + 7] | (raw[offset + 8] << 8),
+        };
+        break;
+      }
+      offset += len;
+    }
+    return dfuDesc;
+  } catch (e) {
+    logWarn('无法读取 DFU 描述符: ' + e.message);
+    return null;
+  }
+}
+
+/* ================================================================
+   UI State
+   ================================================================ */
+let dfuDevice = null;
+let isDfuse = false;
+let selectedFile = null;
+let flashInProgress = false;
+
+/* ================================================================
+   UI Helpers
+   ================================================================ */
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function niceSize(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+  return (n / 1048576).toFixed(2) + ' MB';
+}
+
+function $(id) { return document.getElementById(id); }
+
+function show(id) { $(id).style.display = 'block'; }
+function hide(id) { $(id).style.display = 'none'; }
+
+/* ================================================================
+   Logging
+   ================================================================ */
+function logArea() { return $('logArea'); }
+function logLine(cls, msg) {
+  show('logCard');
+  const el = document.createElement('div');
+  el.className = 'log-line ' + cls;
+  el.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  logArea().appendChild(el);
+  logArea().scrollTop = logArea().scrollHeight;
+}
+function logDebug(m) { logLine('log-debug', m); }
+function logInfo(m)  { logLine('log-info', m); }
+function logOk(m)    { logLine('log-ok', `✅ ${m}`); }
+function logWarn(m)  { logLine('log-warn', `⚠️ ${m}`); }
+function logErr(m)   { logLine('log-err', `❌ ${m}`); }
+
+/* ================================================================
+   Progress
+   ================================================================ */
+function updateProgress(done, total, label) {
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  $('progressWrap').classList.add('show');
+  $('progressBar').style.width = pct + '%';
+  $('progressLabel').textContent = label;
+  $('progressPct').textContent = pct + '% (' + niceSize(done) + ' / ' + niceSize(total) + ')';
+}
+
+function resetProgress() {
+  $('progressWrap').classList.remove('show');
+  $('progressBar').style.width = '0%';
+  $('progressLabel').textContent = '';
+  $('progressPct').textContent = '';
+}
+
+/* ================================================================
+   OS Detection & Driver Guidance
+   ================================================================ */
+function detectOS() {
+  const ua = navigator.userAgent || navigator.platform || '';
+  if (ua.includes('Windows') || ua.includes('Win32') || ua.includes('Win64')) return 'windows';
+  if (ua.includes('Linux')) return 'linux';
+  if (ua.includes('Mac')) return 'macos';
+  return 'unknown';
+}
+
+const BAT_SCRIPT = `@echo off
+setlocal enabledelayedexpansion
+title STM32 Keyboard - Maple 003 Driver Installer
+
+echo ============================================
+echo   STM32F103 Keyboard - Driver Installer
+echo   Maple 003 Bootloader (1EAF:0003)
+echo ============================================
+echo.
+
+:: Check admin
+net session >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [WARNING] Not running as Administrator!
+    echo Right-click this script -> Run as Administrator
+    echo.
+    pause
+    exit /b 1
+)
+
+set "ZADIG_URL=https://github.com/pbatard/libwdi/releases/download/v1.5.1/zadig-2.9.exe"
+set "ZADIG_EXE=%~dp0zadig.exe"
+
+if not exist "%ZADIG_EXE%" (
+    echo [1/3] Downloading Zadig...
+    powershell -Command "Invoke-WebRequest -Uri '%ZADIG_URL%' -OutFile '%ZADIG_EXE%' -UseBasicParsing"
+    if %errorlevel% neq 0 (
+        echo [ERROR] Download failed. Get it from: https://zadig.akeo.ie/
+        pause
+        exit /b 1
+    )
+    echo [OK] Downloaded.
+) else (
+    echo [1/3] Zadig ready.
+)
+echo.
+echo [2/3] Plug in keyboard while holding ESC key.
+echo        Press any key when ready...
+pause >nul
+echo.
+echo [3/3] Launching Zadig...
+echo.
+echo In Zadig:
+echo   1. Options -> List All Devices
+echo   2. Select "Maple 003" (VID=1EAF, PID=0003)
+echo   3. Select "WinUSB" driver
+echo   4. Click "Install Driver" / "Replace Driver"
+echo.
+start "" "%ZADIG_EXE%"
+echo Done! After install, reload the flasher page.
+pause
+`;
+
+const SH_SCRIPT = `#!/bin/bash
+# STM32F103 Keyboard - Maple 003 Udev Rule Installer
+
+RULES_FILE="99-maple003.rules"
+TARGET="/etc/udev/rules.d/99-maple003.rules"
+
+cat > "/tmp/99-maple003.rules" << 'EOF'
+# Maple 003 Bootloader - STM32F103 Keyboard
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="1eaf", ATTRS{idProduct}=="0003", MODE="0666", GROUP="plugdev"
+EOF
+
+echo "Installing udev rules..."
+sudo cp /tmp/99-maple003.rules "$TARGET"
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+echo ""
+echo "Done! Unplug and replug your keyboard."
+echo "Then reload the flasher page."
+`;
+
+function downloadBlob(content, filename, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function setupDriverGuidance(os) {
+  const dot = $('driverDot');
+  const title = $('driverTitle');
+  const steps = $('driverSteps');
+  const btnGroup = $('driverBtnGroup');
+
+  if (os === 'windows') {
+    dot.className = 'dot dot-warn';
+    title.textContent = 'Windows — 驱动安装';
+    steps.innerHTML = `
+      <strong>当前 OS: Windows</strong><br><br>
+      ① 下载 Zadig 驱动安装工具<br>
+      ② 按住 <b>ESC</b> 键插入键盘 USB<br>
+      ③ 打开 Zadig → Options → <b>List All Devices</b><br>
+      ④ 选择 <b>Maple 003</b> (VID=1EAF, PID=0003)<br>
+      ⑤ 选择 <b>WinUSB</b> 驱动 → 点 Install Driver<br>
+      ⑥ 完成后，刷新本页面即可连接设备
+    `;
+    btnGroup.innerHTML = `
+      <button class="btn btn-accent" onclick="downloadBlob(BAT_SCRIPT, 'install-driver.bat', 'application/x-bat')">⬇ 下载一键安装脚本 (.bat)</button>
+      <button class="btn btn-outline btn-sm" onclick="window.open('https://zadig.akeo.ie/','_blank')">🌐 手动下载 Zadig</button>
+    `;
+  } else if (os === 'linux') {
+    dot.className = 'dot dot-warn';
+    title.textContent = 'Linux — 安装 udev 规则';
+    steps.innerHTML = `
+      <strong>当前 OS: Linux</strong><br><br>
+      需要安装 udev 规则以允许非 root 用户访问设备：<br>
+      <code>sudo cp 99-maple003.rules /etc/udev/rules.d/</code><br>
+      <code>sudo udevadm control --reload</code><br>
+      <code>sudo udevadm trigger</code>
+    `;
+    btnGroup.innerHTML = `
+      <button class="btn btn-accent" onclick="downloadBlob(SH_SCRIPT, 'install-udev.sh', 'application/x-sh')">⬇ 下载一键安装脚本 (.sh)</button>
+    `;
+  } else if (os === 'macos') {
+    dot.className = 'dot dot-ok';
+    title.textContent = 'macOS — 通常免驱';
+    steps.innerHTML = 'macOS 一般不需要额外驱动。按住 ESC 插入键盘后，直接点击「连接设备」即可。';
+  } else {
+    dot.className = 'dot dot-warn';
+    title.textContent = '未知系统';
+    steps.innerHTML = '请确认你使用的是 Chrome/Edge 浏览器，并已安装对应驱动。';
+  }
+
+  $('driverNeeded').style.display = 'block';
+}
+
+async function checkDeviceAccess() {
+  const dot = $('driverDot');
+  const title = $('driverTitle');
+
+  try {
+    // Check if we already have permission for a Maple 003 device
+    const devices = await navigator.usb.getDevices();
+    const mapleDevices = devices.filter(d =>
+      d.vendorId === 0x1EAF && d.productId === 0x0003
+    );
+
+    if (mapleDevices.length > 0) {
+      dot.className = 'dot dot-ok';
+      title.textContent = '驱动就绪';
+      $('driverReady').style.display = 'block';
+      $('driverNeeded').style.display = 'none';
+      return true;
+    }
+  } catch (e) {
+    // getDevices() may not be available
+    logDebug('设备检测: ' + e.message);
+  }
+
+  // No device found — show driver guidance
+  setupDriverGuidance(detectOS());
+  return false;
+}
+
+/* ================================================================
+   Connection
+   ================================================================ */
+async function doConnect() {
+  const btn = $('btnConnect');
+  btn.disabled = true;
+  btn.textContent = '⏳ 连接中...';
+
+  try {
+    // Request Maple 003 device (also try STM32 system bootloader as fallback)
+    let usbDevice;
+    try {
+      usbDevice = await navigator.usb.requestDevice({
+        filters: [
+          { vendorId: 0x1EAF, productId: 0x0003 }, // Maple 003
+          { vendorId: 0x0483, productId: 0xDF11 }, // STM32 System DFU
+        ]
+      });
+    } catch (e) {
+      if (e.message && e.message.includes('No device selected')) {
+        logWarn('用户取消了设备选择');
+        btn.disabled = false;
+        btn.textContent = '🔌 连接设备';
+        return;
+      }
+      throw e;
+    }
+
+    logInfo(`已选择设备: VID=0x${usbDevice.vendorId.toString(16).padStart(4,'0')}, PID=0x${usbDevice.productId.toString(16).padStart(4,'0')}`);
+
+    // Find DFU interface
+    await usbDevice.open();
+    let dfuIface = null;
+    let dfuAlt = null;
+
+    for (const config of usbDevice.configurations || []) {
+      for (const iface of config.interfaces || []) {
+        for (const alt of iface.alternates || []) {
+          if (alt.interfaceClass === 0xFE && alt.interfaceSubclass === 0x01) {
+            dfuIface = iface.interfaceNumber;
+            // Prefer DFU mode (protocol 0x02) over Runtime (protocol 0x01)
+            if (!dfuAlt || alt.interfaceProtocol === 0x02) {
+              dfuAlt = alt;
+            }
+          }
+        }
+      }
+    }
+
+    if (!dfuAlt) {
+      await usbDevice.close();
+      throw new Error('未找到 DFU 接口。请确认键盘已进入 DFU 模式（按住 ESC 插入 USB）。');
+    }
+
+    // Read DFU functional descriptor
+    let dfuDesc = null;
+    try {
+      const rawCfg = await usbDevice.controlTransferIn({
+        requestType: 'standard',
+        recipient: 'device',
+        request: 6,
+        value: 0x0200,
+        index: 0
+      }, 256);
+      const bytes = new Uint8Array(rawCfg.buffer);
+      let offset = 0;
+      while (offset < bytes.length) {
+        const len = bytes[offset];
+        const type = bytes[offset + 1];
+        if (len === 0 || offset + len > bytes.length) break;
+        if (type === 0x21) {
+          dfuDesc = {
+            bmAttributes: bytes[offset + 2],
+            wDetachTimeOut: bytes[offset + 3] | (bytes[offset + 4] << 8),
+            wTransferSize: bytes[offset + 5] | (bytes[offset + 6] << 8),
+            bcdDFUVersion: bytes[offset + 7] | (bytes[offset + 8] << 8),
+          };
+          break;
+        }
+        offset += len;
+      }
+    } catch (e) {
+      logWarn('读取 DFU 描述符失败: ' + e.message);
+    }
+
+    // Determine protocol
+    const dfuVersion = dfuDesc ? dfuDesc.bcdDFUVersion : 0x0100;
+    const isDfuSe = (dfuVersion === 0x011a);
+    const transferSize = dfuDesc ? dfuDesc.wTransferSize : 1024;
+    const manifestationTolerant = dfuDesc ? !!(dfuDesc.bmAttributes & 0x02) : false;
+
+    logInfo(`DFU 版本: 0x${dfuVersion.toString(16)}, 协议: ${isDfuSe ? 'DfuSe (ST)' : '标准 DFU'}, 传输大小: ${transferSize} 字节`);
+
+    // Close first since DfuDevice/DfuseDevice will re-open
+    await usbDevice.close();
+
+    if (isDfuSe) {
+      // Read memory descriptor from interface string
+      let memDesc = null;
+      // For STM32F103, the memory descriptor is typically in the interface name
+      // @Internal Flash  /0x08000000/64*001Kg
+      if (dfuAlt.interfaceName) {
+        memDesc = dfuAlt.interfaceName;
+      }
+      dfuDevice = new DfuseDevice(usbDevice, dfuIface, dfuAlt.alternateSetting, memDesc || '@Internal Flash  /0x08000000/128*001Kg');
+      dfuDevice.startAddress = 0x08002000;
+      isDfuse = true;
+      logInfo(`内存映射: ${(dfuDevice.memoryInfo && dfuDevice.memoryInfo.segments || []).map(s =>
+        `0x${s.start.toString(16)}-0x${s.end.toString(16)} (${niceSize(s.sectorSize)} sectors, erasable=${s.erasable})`
+      ).join(', ')}`);
+    } else {
+      dfuDevice = new DfuDevice(usbDevice, dfuIface, dfuAlt.alternateSetting);
+      isDfuse = false;
+    }
+
+    dfuDevice.transferSize = transferSize;
+    dfuDevice.manifestationTolerant = manifestationTolerant;
+
+    await dfuDevice.open();
+
+    // Read current state
+    const state = await dfuDevice.getState();
+    logInfo(`设备状态: ${DFU_STATES[state]} (${state})`);
+
+    // Ensure idle
+    if (state !== 2 /* dfuIDLE */) {
+      logInfo('重置设备到 IDLE 状态...');
+      await dfuDevice.abortToIdle();
+    }
+
+    // Update UI
+    const vid = usbDevice.vendorId.toString(16).padStart(4,'0').toUpperCase();
+    const pid = usbDevice.productId.toString(16).padStart(4,'0').toUpperCase();
+    $('deviceInfo').innerHTML = `<span style="color:var(--green);">✅ 已连接</span> Maple 003 (VID=${vid}, PID=${pid}) · ${isDfuSe ? 'DfuSe' : 'DFU'}`;
+    $('connDot').className = 'dot-ok';
+    $('btnConnect').textContent = '🔌 重新连接';
+    $('btnFlash').disabled = !selectedFile;
+
+    // Hide driver warnings
+    $('driverReady').style.display = 'block';
+    $('driverNeeded').style.display = 'none';
+    $('driverDot').className = 'dot dot-ok';
+    $('driverTitle').textContent = '驱动就绪';
+
+    logOk('设备连接成功，可以开始烧录！');
+
+  } catch (e) {
+    logErr('连接失败: ' + e.message);
+    console.error(e);
+    $('connDot').className = 'dot-err';
+    $('btnConnect').textContent = '🔌 重新连接';
+    dfuDevice = null;
+    isDfuse = false;
+    $('btnFlash').disabled = true;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/* ================================================================
+   File Selection
+   ================================================================ */
+function onFileSelected(input) {
+  if (input.files && input.files.length > 0) {
+    selectedFile = input.files[0];
+    $('fwSize').textContent = niceSize(selectedFile.size);
+    $('flashDot').className = 'dot-ok';
+    if (dfuDevice) {
+      $('btnFlash').disabled = false;
+    }
+    logInfo(`已选择固件: ${selectedFile.name} (${niceSize(selectedFile.size)})`);
+  } else {
+    selectedFile = null;
+    $('fwSize').textContent = '—';
+    $('flashDot').className = 'dot-err';
+    $('btnFlash').disabled = true;
+  }
+}
+
+/* ================================================================
+   Flash!
+   ================================================================ */
+async function doFlash() {
+  if (!dfuDevice) {
+    logErr('请先连接设备');
+    return;
+  }
+  if (!selectedFile) {
+    logErr('请先选择 .bin 固件文件');
+    return;
+  }
+  if (flashInProgress) {
+    logWarn('烧录正在进行中...');
+    return;
+  }
+
+  flashInProgress = true;
+  $('btnFlash').disabled = true;
+  $('btnConnect').disabled = true;
+  $('fileInput').disabled = true;
+  resetProgress();
+  updateProgress(0, selectedFile.size, '准备中...');
+
+  try {
+    // Read file
+    const firmwareData = await selectedFile.arrayBuffer();
+    const totalSize = firmwareData.byteLength;
+
+    if (totalSize === 0) {
+      throw new Error('固件文件为空');
+    }
+
+    logInfo(`========================================`);
+    logInfo(`开始烧录: ${selectedFile.name}`);
+    logInfo(`固件大小: ${niceSize(totalSize)}`);
+    logInfo(`起始地址: 0x08002000`);
+    logInfo(`协议模式: ${isDfuse ? 'DfuSe' : '标准 DFU'}`);
+    logInfo(`传输块大小: ${dfuDevice.transferSize} 字节`);
+    logInfo(`========================================`);
+
+    const startTime = performance.now();
+
+    if (isDfuse && dfuDevice instanceof DfuseDevice) {
+      await dfuDevice.doDownloadDfuse(dfuDevice.transferSize, firmwareData);
+    } else {
+      await dfuDevice.doDownloadStandard(dfuDevice.transferSize, firmwareData);
+    }
+
+    const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+    updateProgress(totalSize, totalSize, '完成');
+    logOk(`烧录成功！耗时 ${elapsed}s`);
+    logInfo('设备将自动重启运行新固件');
+
+    // Update UI
+    $('flashDot').className = 'dot-ok';
+
+  } catch (e) {
+    logErr('烧录失败: ' + e.message);
+    console.error(e);
+    $('flashDot').className = 'dot-err';
+    resetProgress();
+  } finally {
+    flashInProgress = false;
+    $('btnFlash').disabled = false;
+    $('btnConnect').disabled = false;
+    $('fileInput').disabled = false;
+  }
+}
+
+/* ================================================================
+   Init
+   ================================================================ */
+async function init() {
+  // Check WebUSB support
+  if (!navigator.usb) {
+    document.body.innerHTML = `
+      <div class="container" style="text-align:center;padding-top:80px;">
+        <h1 style="color:var(--red);">❌ 浏览器不支持 WebUSB</h1>
+        <p style="margin-top:16px;color:var(--text2);">
+          请使用 <b>Chrome 89+</b> 或 <b>Edge 89+</b> 浏览器打开本页面。<br>
+          WebUSB 仅在基于 Chromium 的桌面浏览器上可用。
+        </p>
+        <p style="margin-top:8px;font-size:0.8rem;color:var(--text2);">
+          下载 Chrome: <a href="https://www.google.com/chrome/" style="color:var(--accent);">google.com/chrome</a>
+        </p>
+      </div>`;
+    return;
+  }
+
+  // Check device access
+  await checkDeviceAccess();
+
+  logInfo('工具就绪。插入键盘（按住 ESC），点击「连接设备」开始。');
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

@@ -1,0 +1,3 @@
+# Maple 003 Bootloader - STM32F103 Keyboard
+# Allow non-root access to the DFU bootloader
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="1eaf", ATTRS{idProduct}=="0003", MODE="0666", GROUP="plugdev"
