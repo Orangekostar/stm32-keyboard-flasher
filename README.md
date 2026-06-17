@@ -13,8 +13,7 @@
 #### Windows
 1. 进入 `drivers/windows/` 目录
 2. 右键 `install-driver.bat` → **以管理员身份运行**
-3. 脚本会自动下载 Zadig 并启动
-4. 在 Zadig 中：Options → List All Devices → 选择 **Maple 003** → 选择 **WinUSB** → Install Driver
+3. 脚本自动安装 WinUSB 驱动（全程静默，无需手动操作）
 
 #### Linux
 ```bash
@@ -58,7 +57,7 @@ stm32-keyboard-flasher/
 └── drivers/
     ├── windows/
     │   ├── install-driver.bat      # Windows 一键驱动安装脚本
-    │   └── zadig.ini               # Zadig 预配置文件
+    │   └── wdi-simple.exe          # 命令行驱动安装工具 (libwdi)
     └── linux/
         ├── install-udev.sh         # Linux 一键 udev 安装脚本
         └── 99-maple003.rules       # udev 规则文件

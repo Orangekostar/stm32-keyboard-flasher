@@ -780,43 +780,44 @@ echo.
 :: Check admin
 net session >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [WARNING] Not running as Administrator!
+    echo [ERROR] Not running as Administrator!
     echo Right-click this script -> Run as Administrator
     echo.
     pause
     exit /b 1
 )
 
-set "ZADIG_URL=https://github.com/pbatard/libwdi/releases/download/v1.5.1/zadig-2.9.exe"
-set "ZADIG_EXE=%~dp0zadig.exe"
+set "WDI_EXE=%~dp0wdi-simple.exe"
+set "WDI_URL=https://github.com/Timocop/libwdi-wdi-releases/releases/download/v1.0/x64.zip"
 
-if not exist "%ZADIG_EXE%" (
-    echo [1/3] Downloading Zadig...
-    powershell -Command "Invoke-WebRequest -Uri '%ZADIG_URL%' -OutFile '%ZADIG_EXE%' -UseBasicParsing"
+if not exist "%WDI_EXE%" (
+    echo [1/2] Downloading wdi-simple.exe...
+    powershell -Command ^
+      "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;" ^
+      "$z='%TEMP%\\wdi-simple.zip';" ^
+      "Invoke-WebRequest -Uri '%WDI_URL%' -OutFile $z -UseBasicParsing;" ^
+      "Expand-Archive -Path $z -DestinationPath '%~dp0' -Force;" ^
+      "Remove-Item $z -Force"
     if %errorlevel% neq 0 (
-        echo [ERROR] Download failed. Get it from: https://zadig.akeo.ie/
+        echo [ERROR] Download failed.
+        echo Download full package: github.com/Orangekostar/stm32-keyboard-flasher
         pause
         exit /b 1
     )
-    echo [OK] Downloaded.
 ) else (
-    echo [1/3] Zadig ready.
+    echo [1/2] wdi-simple.exe ready.
 )
 echo.
-echo [2/3] Plug in keyboard while holding ESC key.
-echo        Press any key when ready...
-pause >nul
+echo [2/2] Installing WinUSB driver for Maple 003...
+"%WDI_EXE%" --vid 0x1EAF --pid 0x0003 --driver winusb --name "Maple 003 Bootloader" --overwrite
+
+if %errorlevel% neq 0 (
+    echo [ERROR] Driver install failed. Plug in keyboard while holding ESC, then retry.
+    pause
+    exit /b 1
+)
 echo.
-echo [3/3] Launching Zadig...
-echo.
-echo In Zadig:
-echo   1. Options -> List All Devices
-echo   2. Select "Maple 003" (VID=1EAF, PID=0003)
-echo   3. Select "WinUSB" driver
-echo   4. Click "Install Driver" / "Replace Driver"
-echo.
-start "" "%ZADIG_EXE%"
-echo Done! After install, reload the flasher page.
+echo Done! WinUSB driver installed. Reload the flasher page and connect.
 pause
 `;
 
@@ -863,16 +864,15 @@ function setupDriverGuidance(os) {
     title.textContent = 'Windows — 驱动安装';
     steps.innerHTML = `
       <strong>当前 OS: Windows</strong><br><br>
-      ① 下载 Zadig 驱动安装工具<br>
-      ② 按住 <b>ESC</b> 键插入键盘 USB<br>
-      ③ 打开 Zadig → Options → <b>List All Devices</b><br>
-      ④ 选择 <b>Maple 003</b> (VID=1EAF, PID=0003)<br>
-      ⑤ 选择 <b>WinUSB</b> 驱动 → 点 Install Driver<br>
-      ⑥ 完成后，刷新本页面即可连接设备
+      ① 点击下方按钮，下载 <code>install-driver.bat</code><br>
+      ② <b>右键 → 以管理员身份运行</b> 脚本<br>
+      ③ 自动下载并安装 WinUSB 驱动（全程静默）<br>
+      ④ 完成后<b>刷新本页面</b>即可连接设备<br>
+      <br><span style="color:var(--text2);font-size:0.8rem;">💡 执行时需按住 ESC 插入键盘</span>
     `;
     btnGroup.innerHTML = `
       <button class="btn btn-accent" onclick="downloadBlob(BAT_SCRIPT, 'install-driver.bat', 'application/x-bat')">⬇ 下载一键安装脚本 (.bat)</button>
-      <button class="btn btn-outline btn-sm" onclick="window.open('https://zadig.akeo.ie/','_blank')">🌐 手动下载 Zadig</button>
+      <button class="btn btn-outline btn-sm" onclick="window.open('https://github.com/Orangekostar/stm32-keyboard-flasher','_blank')">📦 下载完整工具包</button>
     `;
   } else if (os === 'linux') {
     dot.className = 'dot dot-warn';
