@@ -23,18 +23,13 @@ echo.
 
 :: Step 1: Check wdi-simple.exe
 set "WDI_EXE=%~dp0wdi-simple.exe"
-set "WDI_URL=https://github.com/Timocop/libwdi-wdi-releases/releases/download/v1.0/x64.zip"
+set "WDI_URL=https://github.com/Orangekostar/stm32-keyboard-flasher/raw/main/drivers/windows/wdi-simple.exe"
 
 if not exist "%WDI_EXE%" (
-    echo [STEP 1/3] Downloading wdi-simple.exe...
-    echo URL: %WDI_URL%
-    echo.
+    echo [STEP 1/2] Downloading wdi-simple.exe...
     powershell -Command ^
-      "$zip='%TEMP%\wdi-simple.zip';" ^
       "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;" ^
-      "Invoke-WebRequest -Uri '%WDI_URL%' -OutFile $zip -UseBasicParsing;" ^
-      "Expand-Archive -Path $zip -DestinationPath '%~dp0' -Force;" ^
-      "Remove-Item $zip -Force"
+      "Invoke-WebRequest -Uri '%WDI_URL%' -OutFile '%WDI_EXE%' -UseBasicParsing"
     if %errorlevel% neq 0 (
         echo [ERROR] Download failed.
         echo Please download the full package from:
@@ -42,16 +37,16 @@ if not exist "%WDI_EXE%" (
         pause
         exit /b 1
     )
-    echo [OK] wdi-simple.exe ready.
+    echo [OK] wdi-simple.exe downloaded.
 ) else (
-    echo [STEP 1/3] wdi-simple.exe found locally.
+    echo [STEP 1/2] wdi-simple.exe found locally.
 )
 echo.
 
 :: Step 2: Install driver
-echo [STEP 2/3] Installing WinUSB driver for Maple 003...
+echo [STEP 2/2] Installing WinUSB driver for Maple 003...
 echo.
-"%WDI_EXE%" --vid 0x1EAF --pid 0x0003 --driver winusb --name "Maple 003 Bootloader" --overwrite
+"%WDI_EXE%" --vid 0x1EAF --pid 0x0003 -t 0 -n "Maple 003 Bootloader" -s
 
 if %errorlevel% neq 0 (
     echo.
@@ -66,15 +61,13 @@ if %errorlevel% neq 0 (
 echo.
 echo [OK] WinUSB driver installed successfully!
 
-:: Step 3: Done
 echo.
 echo ============================================
 echo   Driver installation complete!
 echo ============================================
 echo.
 echo Your Maple 003 keyboard is now ready for flashing.
-echo No need to restart — just reload the flasher page
-echo and click "Connect Device".
+echo Reload the flasher page and click "Connect Device".
 echo.
 echo Press any key to exit...
 pause >nul
