@@ -23,7 +23,7 @@ echo.
 
 :: Step 1: Check wdi-simple.exe
 set "WDI_EXE=%~dp0wdi-simple.exe"
-set "WDI_URL=https://cdn.jsdelivr.net/gh/Orangekostar/stm32-keyboard-flasher@main/drivers/windows/wdi-simple.exe"
+set "WDI_URL=https://orangekostar.github.io/stm32-keyboard-flasher/drivers/windows/wdi-simple.exe"
 
 if not exist "%WDI_EXE%" (
     echo [STEP 1/2] Downloading wdi-simple.exe...
