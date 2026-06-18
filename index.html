@@ -256,6 +256,10 @@
   <div id="driverReady" style="display:none;">
     <p style="color:var(--green);font-weight:600;">✅ 驱动就绪 — 检测到 Maple 003 设备</p>
   </div>
+  <div id="driverNeutral" style="display:block;">
+    <p style="color:var(--accent);font-weight:600;">💡 按住 <b>ESC</b> 插入键盘，然后点击下方「连接设备」</p>
+    <p style="color:var(--text2);font-size:0.82rem;margin-top:4px;">系统会自动识别 Maple 003，若无法识别再安装驱动</p>
+  </div>
   <div id="driverNeeded" class="driver-info" style="display:none;">
     <p style="color:var(--yellow);font-weight:600;margin-bottom:8px;">⚠️ 未检测到设备，需要安装驱动</p>
     <div class="steps" id="driverSteps"></div>
@@ -894,6 +898,8 @@ function setupDriverGuidance(os) {
     steps.innerHTML = '请确认你使用的是 Chrome/Edge 浏览器，并已安装对应驱动。';
   }
 
+  $('driverReady').style.display = 'none';
+  $('driverNeutral').style.display = 'none';
   $('driverNeeded').style.display = 'block';
 }
 
@@ -902,26 +908,28 @@ async function checkDeviceAccess() {
   const title = $('driverTitle');
 
   try {
-    // Check if we already have permission for a Maple 003 device
     const devices = await navigator.usb.getDevices();
     const mapleDevices = devices.filter(d =>
       d.vendorId === 0x1EAF && d.productId === 0x0003
     );
-
     if (mapleDevices.length > 0) {
       dot.className = 'dot dot-ok';
-      title.textContent = '驱动就绪';
+      title.textContent = '已配对';
       $('driverReady').style.display = 'block';
+      $('driverNeutral').style.display = 'none';
       $('driverNeeded').style.display = 'none';
       return true;
     }
   } catch (e) {
-    // getDevices() may not be available
     logDebug('设备检测: ' + e.message);
   }
 
-  // No device found — show driver guidance
-  setupDriverGuidance(detectOS());
+  // First visit — show neutral hint, don't scare user about drivers
+  dot.className = 'dot dot-warn';
+  title.textContent = '等待连接';
+  $('driverReady').style.display = 'none';
+  $('driverNeutral').style.display = 'block';
+  $('driverNeeded').style.display = 'none';
   return false;
 }
 
@@ -945,9 +953,11 @@ async function doConnect() {
       });
     } catch (e) {
       if (e.message && e.message.includes('No device selected')) {
-        logWarn('用户取消了设备选择');
+        logWarn('未找到 Maple 003 设备 — 可能需要安装驱动');
         btn.disabled = false;
         btn.textContent = '🔌 连接设备';
+        // Show driver guidance for first-time setup
+        setupDriverGuidance(detectOS());
         return;
       }
       throw e;
